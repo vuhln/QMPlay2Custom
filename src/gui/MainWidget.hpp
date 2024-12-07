@@ -23,13 +23,13 @@
 
 #include <PlayClass.hpp>
 #include <Updater.hpp>
+#include <VideoWidget.hpp>
 
 class QFrame;
 class QLabel;
 class Slider;
 class MenuBar;
 class InfoDock;
-class VideoDock;
 class VolWidget;
 class IPCSocket;
 class QToolButton;
@@ -174,7 +174,7 @@ private:
     QFrame *vLine;
     QLabel *timeL;
 
-    VideoDock *videoDock;
+    VideoWidget *videoWidget;
     InfoDock *infoDock;
     PlaylistDock *playlistDock;
 

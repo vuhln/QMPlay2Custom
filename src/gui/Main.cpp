@@ -226,12 +226,12 @@ void QMPlay2GUIClass::restoreGeometry(const QString &pth, QWidget *w, const int 
 
 void QMPlay2GUIClass::updateInDockW()
 {
-    qobject_cast<MainWidget *>(mainW)->videoDock->updateIDW();
+    qobject_cast<MainWidget *>(mainW)->videoWidget->getVideoDock()->updateIDW();
 }
 
 const QWidget *QMPlay2GUIClass::getVideoDock() const
 {
-    return qobject_cast<MainWidget *>(mainW)->videoDock;
+    return qobject_cast<MainWidget *>(mainW)->videoWidget->getVideoDock();
 }
 const QWidget *QMPlay2GUIClass::getMainWindow() const
 {

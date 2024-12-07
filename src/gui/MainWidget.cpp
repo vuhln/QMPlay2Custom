@@ -55,6 +55,7 @@
 #include <Appearance.hpp>
 #include <MainWidget.hpp>
 #include <SettingsWidget.hpp>
+#include <VideoWidget.hpp>
 #include <VideoDock.hpp>
 #include <InfoDock.hpp>
 #include <PlaylistDock.hpp>
@@ -194,8 +195,8 @@ MainWidget::MainWidget(QList<QPair<QString, QString>> &arguments)
     statusBar->addWidget(stateL);
     setStatusBar(statusBar);
 
-    videoDock = new VideoDock;
-    videoDock->setObjectName("videoDock");
+    videoWidget = new VideoWidget(arguments);
+    videoWidget->setObjectName("videoWidget");
 
     playlistDock = new PlaylistDock;
     playlistDock->setObjectName("playlistDock");
@@ -206,7 +207,6 @@ MainWidget::MainWidget(QList<QPair<QString, QString>> &arguments)
     QMPlay2Extensions::openExtensions();
 
 #ifndef Q_OS_ANDROID
-    addDockWidget(Qt::LeftDockWidgetArea, videoDock);
     addDockWidget(Qt::RightDockWidgetArea, infoDock);
     addDockWidget(Qt::RightDockWidgetArea, playlistDock);
     DockWidget *firstVisualization = nullptr;
@@ -224,14 +224,9 @@ MainWidget::MainWidget(QList<QPair<QString, QString>> &arguments)
                 else
                     addDockWidget(Qt::LeftDockWidgetArea, firstVisualization = dw);
             }
-            else if (QMPlay2Ext->canConvertAddress())
-            {
-                tabifyDockWidget(playlistDock, dw);
-                dw->setVisible(true);
-            }
             else
             {
-                tabifyDockWidget(videoDock, dw);
+                tabifyDockWidget(playlistDock, dw);
                 dw->setVisible(true);
             }
         }
@@ -319,8 +314,8 @@ MainWidget::MainWidget(QList<QPair<QString, QString>> &arguments)
     connect(infoDock, SIGNAL(chStream(const QString &)), &playC, SLOT(chStream(const QString &)));
     connect(infoDock, SIGNAL(saveCover()), &playC, SLOT(saveCover()));
 
-    connect(videoDock, SIGNAL(resized(int, int)), &playC, SLOT(videoResized(int, int)));
-    connect(videoDock, SIGNAL(itemDropped(const QString &, bool)), this, SLOT(itemDropped(const QString &, bool)));
+    connect(videoWidget->getVideoDock(), SIGNAL(resized(int, int)), &playC, SLOT(videoResized(int, int)));
+    connect(videoWidget->getVideoDock(), SIGNAL(itemDropped(const QString &, bool)), this, SLOT(itemDropped(const QString &, bool)));
 
     connect(playlistDock, SIGNAL(play(const QString &)), &playC, SLOT(play(const QString &)));
     connect(playlistDock, SIGNAL(repeatEntry(bool)), &playC, SLOT(repeatEntry(bool)));
@@ -364,7 +359,7 @@ MainWidget::MainWidget(QList<QPair<QString, QString>> &arguments)
     connect(&playC, SIGNAL(updateBuffered(qint64, qint64, double, double)), infoDock, SLOT(updateBuffered(qint64, qint64, double, double)));
     connect(&playC, SIGNAL(updateBufferedRange(int, int)), seekS, SLOT(drawRange(int, int)));
     connect(&playC, SIGNAL(updateWindowTitle(const QString &)), this, SLOT(updateWindowTitle(const QString &)));
-    connect(&playC, SIGNAL(updateImage(const QImage &)), videoDock, SLOT(updateImage(const QImage &)));
+    connect(&playC, SIGNAL(updateImage(const QImage &)), videoWidget->getVideoDock(), SLOT(updateImage(const QImage &)));
     connect(&playC, &PlayClass::videoStarted, this, &MainWidget::videoStarted);
     connect(&playC, &PlayClass::videoNotStarted, this, [this] {
         m_restoreWindowOnVideo = false;
@@ -672,9 +667,9 @@ void MainWidget::videoStarted(bool noVideo)
     const bool autoOpenVideoWindow = QMPlay2Core.getSettings().getBool("AutoOpenVideoWindow");
     if (autoRestoreMainWindowOnVideo || (noVideo && autoOpenVideoWindow))
     {
-        if (!videoDock->isVisible())
-            videoDock->show();
-        videoDock->raise();
+        if (!videoWidget->getVideoDock()->isVisible())
+            videoWidget->getVideoDock()->show();
+        videoWidget->getVideoDock()->raise();
     }
     if (autoRestoreMainWindowOnVideo)
     {
@@ -808,7 +803,7 @@ void MainWidget::visualizationFullScreen()
     const auto maybeGoFullScreen = [this, senderW] {
         if (!fullScreen)
         {
-            videoDock->setWidget(senderW);
+            videoWidget->getVideoDock()->setWidget(senderW);
             toggleFullScreen();
         }
     };
@@ -1158,19 +1153,14 @@ void MainWidget::toggleCompactView()
 #endif
         mainTB->hide();
         statusBar->hide();
-        videoDock->show();
-
-        videoDock->fullScreen(true);
-
+        videoWidget->toggleCompactView();
         isCompactView = true;
     }
     else
     {
-        videoDock->setLoseHeight(0);
+
         isCompactView = false;
-
-        videoDock->fullScreen(false);
-
+        videoWidget->toggleCompactView();
         restoreState(dockWidgetState);
         dockWidgetState.clear();
 
@@ -1198,142 +1188,141 @@ void MainWidget::toggleAlwaysOnTop(bool checked)
 }
 void MainWidget::toggleFullScreen()
 {
-    static bool visible, tb_movable;
-#ifndef Q_OS_ANDROID
-    static bool maximized;
-#endif
-#ifdef Q_OS_MACOS
-    if (isFullScreen())
-    {
-        showNormal();
-        return;
-    }
-#endif
-    if (!fullScreen)
-    {
-        visible = isVisible();
+//     static bool visible, tb_movable;
+// #ifndef Q_OS_ANDROID
+//     static bool maximized;
+// #endif
+// #ifdef Q_OS_MACOS
+//     if (isFullScreen())
+//     {
+//         showNormal();
+//         return;
+//     }
+// #endif
+//     if (!fullScreen)
+//     {
+//         visible = isVisible();
 
-        if ((m_compactViewBeforeFullScreen = isCompactView))
-            toggleCompactView();
+//         if ((m_compactViewBeforeFullScreen = isCompactView))
+//             toggleCompactView();
 
-#ifndef Q_OS_ANDROID
-        maximized = isMaximized();
+// #ifndef Q_OS_ANDROID
+//         maximized = isMaximized();
 
-#ifndef Q_OS_MACOS
-#ifndef Q_OS_WIN
-        if (isFullScreen())
-#endif
-            showNormal();
-#endif
+// #ifndef Q_OS_MACOS
+// #ifndef Q_OS_WIN
+//         if (isFullScreen())
+// #endif
+//             videoWidget->showNormal();
+// #endif
 
-        dockWidgetState = saveState();
-        if (!maximized)
-            savedGeo = geometry();
-#else
-        dockWidgetState = saveState();
-#endif // Q_OS_ANDROID
+//         dockWidgetState = saveState();
+//         if (!maximized)
+//             savedGeo = geometry();
+// #else
+//         dockWidgetState = saveState();
+// #endif // Q_OS_ANDROID
 
-#if !defined Q_OS_MACOS
-        menuBar->hide();
-#endif
-        statusBar->hide();
+// #if !defined Q_OS_MACOS
+//         menuBar->hide();
+// #endif
+//         statusBar->hide();
 
-        mainTB->hide();
-        addToolBar(Qt::BottomToolBarArea, mainTB);
-        tb_movable = mainTB->isMovable();
-        mainTB->setMovable(false);
+//         mainTB->hide();
+//         addToolBar(Qt::BottomToolBarArea, mainTB);
+//         tb_movable = mainTB->isMovable();
+//         mainTB->setMovable(false);
 
-        hideDockWidgetsAndDisableFeatures();
+//         hideDockWidgetsAndDisableFeatures();
+//         videoWidget->toggleFullScreen();
 
-        videoDock->fullScreen(true);
-        videoDock->show();
+// #ifdef Q_OS_MACOS
+//         menuBar->window->toggleVisibility->setEnabled(false);
+// #endif
+//         menuBar->window->toggleCompactView->setEnabled(false);
+//         menuBar->window->toggleFullScreen->setShortcuts(QList<QKeySequence>() << menuBar->window->toggleFullScreen->shortcut() << QKeySequence("ESC"));
+//         fullScreen = true;
 
-#ifdef Q_OS_MACOS
-        menuBar->window->toggleVisibility->setEnabled(false);
-#endif
-        menuBar->window->toggleCompactView->setEnabled(false);
-        menuBar->window->toggleFullScreen->setShortcuts(QList<QKeySequence>() << menuBar->window->toggleFullScreen->shortcut() << QKeySequence("ESC"));
-        fullScreen = true;
+// #ifndef Q_OS_MACOS
+//         showFullScreen();
+// #else
+//         const auto geo = window()->windowHandle()->screen()->geometry();
+//         setMinimumSize(geo.size());
+//         setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
+//         setGeometry(geo);
+//         QMPlay2MacExtensions::showSystemUi(windowHandle(), false);
+//         show();
+// #endif
 
-#ifndef Q_OS_MACOS
-        showFullScreen();
-#else
-        const auto geo = window()->windowHandle()->screen()->geometry();
-        setMinimumSize(geo.size());
-        setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
-        setGeometry(geo);
-        QMPlay2MacExtensions::showSystemUi(windowHandle(), false);
-        show();
-#endif
+//         if (playC.isPlaying())
+//             QMPlay2GUI.screenSaver->inhibit(1);
+//     }
+//     else
+//     {
+// #ifdef Q_OS_MACOS
+//         menuBar->window->toggleVisibility->setEnabled(true);
+// #endif
+//         menuBar->window->toggleCompactView->setEnabled(true);
+//         menuBar->window->toggleFullScreen->setShortcuts(QList<QKeySequence>() << menuBar->window->toggleFullScreen->shortcut());
 
-        if (playC.isPlaying())
-            QMPlay2GUI.screenSaver->inhibit(1);
-    }
-    else
-    {
-#ifdef Q_OS_MACOS
-        menuBar->window->toggleVisibility->setEnabled(true);
-#endif
-        menuBar->window->toggleCompactView->setEnabled(true);
-        menuBar->window->toggleFullScreen->setShortcuts(QList<QKeySequence>() << menuBar->window->toggleFullScreen->shortcut());
+//         videoWidget->getVideoDock()->setLoseHeight(0);
+//         fullScreen = false;
 
-        videoDock->setLoseHeight(0);
-        fullScreen = false;
+// #ifndef Q_OS_ANDROID
+// #ifdef Q_OS_MACOS
+//         setMinimumSize(0, 0);
+//         QMPlay2MacExtensions::showSystemUi(windowHandle(), true);
+//         setWindowFlags(Qt::Window);
+// #else
+//         showNormal();
+// #endif // Q_OS_MACOS
+//         if (maximized)
+//             showMaximized();
+//         else
+//         {
+// #ifdef Q_OS_MACOS
+//             showNormal();
+// #endif
+//             setGeometry(savedGeo);
+//         }
+// #else // Q_OS_ANDROID
+//         showMaximized();
+// #endif
+// #ifdef Q_OS_WIN
+//         QCoreApplication::processEvents();
+// #endif
 
-#ifndef Q_OS_ANDROID
-#ifdef Q_OS_MACOS
-        setMinimumSize(0, 0);
-        QMPlay2MacExtensions::showSystemUi(windowHandle(), true);
-        setWindowFlags(Qt::Window);
-#else
-        showNormal();
-#endif // Q_OS_MACOS
-        if (maximized)
-            showMaximized();
-        else
-        {
-#ifdef Q_OS_MACOS
-            showNormal();
-#endif
-            setGeometry(savedGeo);
-        }
-#else // Q_OS_ANDROID
-        showMaximized();
-#endif
-#ifdef Q_OS_WIN
-        QCoreApplication::processEvents();
-#endif
+//         videoWidget->getVideoDock()->fullScreen(false);
 
-        videoDock->fullScreen(false);
+//         restoreState(dockWidgetState);
+//         dockWidgetState.clear();
 
-        restoreState(dockWidgetState);
-        dockWidgetState.clear();
+//         if (!visible) //jeżeli okno było wcześniej ukryte, to ma je znowu ukryć
+//             toggleVisibility();
 
-        if (!visible) //jeżeli okno było wcześniej ukryte, to ma je znowu ukryć
-            toggleVisibility();
+//         restoreDockWidgetFeatures();
 
-        restoreDockWidgetFeatures();
+// #if defined(Q_OS_ANDROID)
+//         menuBar->setVisible(true);
+// #elif !defined Q_OS_MACOS
+//         menuBar->setVisible(!hideMenuAct->isChecked());
+// #endif
+//         statusBar->show();
 
-#if defined(Q_OS_ANDROID)
-        menuBar->setVisible(true);
-#elif !defined Q_OS_MACOS
-        menuBar->setVisible(!hideMenuAct->isChecked());
-#endif
-        statusBar->show();
+//         mainTB->setMovable(tb_movable);
 
-        mainTB->setMovable(tb_movable);
+//         if (m_compactViewBeforeFullScreen)
+//             toggleCompactView();
 
-        if (m_compactViewBeforeFullScreen)
-            toggleCompactView();
+//         playlistDock->scrollToCurrectItem();
 
-        playlistDock->scrollToCurrectItem();
+//         QMPlay2GUI.screenSaver->unInhibit(1);
 
-        QMPlay2GUI.screenSaver->unInhibit(1);
-
-        setFocus();
-    }
-    menuBar->window->alwaysOnTop->setEnabled(!fullScreen);
-    emit QMPlay2Core.fullScreenChanged(fullScreen);
+//         setFocus();
+//     }
+//     menuBar->window->alwaysOnTop->setEnabled(!fullScreen);
+//     emit QMPlay2Core.fullScreenChanged(fullScreen);
+       videoWidget->toggleFullScreen();
 }
 void MainWidget::showMessage(const QString &msg, const QString &title, int messageIcon, int ms)
 {
@@ -1727,7 +1716,7 @@ void MainWidget::hideDockWidgetsAndDisableFeatures()
     playlistDock->hide();
     playlistDock->setFeatures(DockWidget::NoDockWidgetFeatures);
 
-    addDockWidget(Qt::RightDockWidgetArea, videoDock);
+    addDockWidget(Qt::RightDockWidgetArea, videoWidget->getVideoDock());
     for (QMPlay2Extensions *QMPlay2Ext : QMPlay2Extensions::QMPlay2ExtensionsList())
     {
         if (DockWidget *dw = QMPlay2Ext->getDockWidget())
@@ -1753,16 +1742,16 @@ void MainWidget::showToolBar(bool showTB)
 {
     if (showTB && (!mainTB->isVisible() || !statusBar->isVisible()))
     {
-        videoDock->setLoseHeight(statusBar->height());
+        videoWidget->getVideoDock()->setLoseHeight(statusBar->height());
         statusBar->show();
-        videoDock->setLoseHeight(mainTB->height() + statusBar->height());
+        videoWidget->getVideoDock()->setLoseHeight(mainTB->height() + statusBar->height());
         mainTB->show();
     }
     else if (!showTB && (mainTB->isVisible() || statusBar->isVisible()))
     {
-        videoDock->setLoseHeight(statusBar->height());
+        videoWidget->getVideoDock()->setLoseHeight(statusBar->height());
         mainTB->hide();
-        videoDock->setLoseHeight(0);
+        videoWidget->getVideoDock()->setLoseHeight(0);
         statusBar->hide();
     }
 }
@@ -1934,7 +1923,7 @@ void MainWidget::keyPressEvent(QKeyEvent *e)
 void MainWidget::mouseMoveEvent(QMouseEvent *e)
 {
     static bool inRestoreState = false;
-    if (!inRestoreState && (fullScreen || isCompactView) && (e->buttons() == Qt::NoButton || videoDock->isTouch))
+    if (!inRestoreState && (fullScreen || isCompactView) && (e->buttons() == Qt::NoButton || videoWidget->getVideoDock()->isTouch))
     {
         const bool isToolbarVisible = mainTB->isVisible();
 
@@ -1966,17 +1955,17 @@ void MainWidget::mouseMoveEvent(QMouseEvent *e)
         }
 
         const int trigger1 = canDisplayLeftPanel
-            ? qMax<int>(5, ceil(0.003 * (videoDock->isTouch ? 8 : 1) * width()))
+            ? qMax<int>(5, ceil(0.003 * (videoWidget->getVideoDock()->isTouch ? 8 : 1) * width()))
             : 0
         ;
-        const int trigger2 = qMax<int>(15, ceil(0.025 * (videoDock->isTouch ? 4 : 1) * width()));
+        const int trigger2 = qMax<int>(15, ceil(0.025 * (videoWidget->getVideoDock()->isTouch ? 4 : 1) * width()));
 
-        if (videoDock->touchEnded)
-            videoDock->isTouch = videoDock->touchEnded = false;
+        if (videoWidget->getVideoDock()->touchEnded)
+            videoWidget->getVideoDock()->isTouch = videoWidget->getVideoDock()->touchEnded = false;
 
         int mPosX = 0;
-        if (videoDock->x() >= 0)
-            mPosX = videoDock->mapFromGlobal(e->globalPos()).x();
+        if (videoWidget->getVideoDock()->x() >= 0)
+            mPosX = videoWidget->getVideoDock()->mapFromGlobal(e->globalPos()).x();
 
         /* ToolBar */
         if (!playlistDock->isVisible() && mPosX >= trigger1)
@@ -2132,7 +2121,7 @@ void MainWidget::closeEvent(QCloseEvent *e)
 }
 void MainWidget::moveEvent(QMoveEvent *e)
 {
-    if (videoDock->isVisible() && !videoDock->isFloating())
+    if (videoWidget->getVideoDock()->isVisible() && !videoWidget->getVideoDock()->isFloating())
         emit QMPlay2Core.videoDockMoved();
     QMainWindow::moveEvent(e);
 }
@@ -2173,7 +2162,7 @@ void MainWidget::changeEvent(QEvent *e)
     if (e->type() == QEvent::WindowStateChange)
     {
         if (isFullScreen() || isMaximized())
-            videoDock->scheduleEnterEventWorkaround();
+            videoWidget->getVideoDock()->scheduleEnterEventWorkaround();
     }
 #if defined(Q_OS_WIN) && QT_VERSION < QT_VERSION_CHECK(6, 4, 0)
     else if (e->type() == QEvent::PaletteChange)

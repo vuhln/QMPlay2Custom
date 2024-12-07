@@ -5,6 +5,7 @@ set(GUI_HDR
     Main.hpp
     MenuBar.hpp
     MainWidget.hpp
+    VideoWidget.hpp
     AddressBox.hpp
     VideoDock.hpp
     InfoDock.hpp
@@ -36,6 +37,7 @@ set(GUI_SRC
     Main.cpp
     MenuBar.cpp
     MainWidget.cpp
+    VideoWidget.cpp
     AddressBox.cpp
     VideoDock.cpp
     InfoDock.cpp
